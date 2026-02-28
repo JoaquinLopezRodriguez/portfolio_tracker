@@ -1,7 +1,6 @@
 streamlit
 pandas
 numpy
-pandas-datareader
+yfinance
 plotly
 scipy
-openpyxl
