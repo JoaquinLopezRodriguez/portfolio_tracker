@@ -108,6 +108,7 @@ def simular_cartera_final(df_movs):
 tab1, tab2, tab3 = st.tabs(["🏠 Principal", "📥 Movimientos", "📉 Métricas & Riesgo"])
 with tab2:
     st.subheader("Carga y Edición de Movimientos")
+    st.info("💡 **Nota:** Si no subes un archivo, verás datos de ejemplo. Puedes editarlos directamente en la tabla de abajo o subir tu propio Excel/CSV para limpiar el reporte, respetando el formato del ejemplo.")
     
     # El componente para subir el archivo
     archivo = st.file_uploader("Subir Excel (.xlsx) o CSV (.csv)", type=['xlsx', 'csv'])
@@ -132,10 +133,12 @@ with tab2:
 
     # Inicializar si no existe (datos de ejemplo)
     if 'df_movimientos' not in st.session_state:
-        st.session_state.df_movimientos = pd.DataFrame([
-            {'fecha': pd.to_datetime('2023-01-01'), 'tipo': 'DEPOSITO', 'instrumento': 'CASH', 'monto': 10000.0, 'cantidad': 0}
-        ])
-    
+            st.session_state.df_movimientos = pd.DataFrame([
+                {'fecha': pd.to_datetime('2023-01-01'), 'tipo': 'DEPOSITO', 'instrumento': 'CASH', 'monto': 10000.0, 'cantidad': 0},
+                {'fecha': pd.to_datetime('2023-01-15'), 'tipo': 'COMPRA', 'instrumento': 'AAPL', 'monto': 3000.0, 'cantidad': 20},
+                {'fecha': pd.to_datetime('2023-02-01'), 'tipo': 'COMPRA', 'instrumento': 'MSFT', 'monto': 4000.0, 'cantidad': 15},
+                {'fecha': pd.to_datetime('2023-03-10'), 'tipo': 'DIVIDENDO', 'instrumento': 'AAPL', 'monto': 50.0, 'cantidad': 0}
+            ])
     # El editor manual (permite corregir lo subido o agregar filas)
     st.session_state.df_movimientos = st.data_editor(
         st.session_state.df_movimientos, 
@@ -219,5 +222,6 @@ if curva is not None and not curva.empty:
                 st.plotly_chart(px.imshow(df_p.pct_change().corr(), text_auto=".2f", color_continuous_scale='RdBu_r'), use_container_width=True)
 else:
     st.info("Carga datos válidos para ver el análisis.")
+
 
 
