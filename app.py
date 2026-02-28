@@ -106,15 +106,42 @@ def simular_cartera_final(df_movs):
 
 # --- INTERFAZ DE TABS ---
 tab1, tab2, tab3 = st.tabs(["🏠 Principal", "📥 Movimientos", "📉 Métricas & Riesgo"])
-
 with tab2:
-    st.subheader("Editor de Movimientos")
+    st.subheader("Carga y Edición de Movimientos")
+    
+    # El componente para subir el archivo
+    archivo = st.file_uploader("Subir Excel (.xlsx) o CSV (.csv)", type=['xlsx', 'csv'])
+    
+    if archivo:
+        # Lectura según el tipo de archivo
+        if archivo.name.endswith('.csv'):
+            df_c = pd.read_csv(archivo)
+        else:
+            df_c = pd.read_excel(archivo)
+            
+        # Limpieza básica de columnas para evitar errores de mayúsculas/espacios
+        df_c.columns = df_c.columns.str.lower().str.strip()
+        
+        # Asegurar que la fecha sea objeto datetime
+        if 'fecha' in df_c.columns:
+            df_c['fecha'] = pd.to_datetime(df_c['fecha'])
+        
+        # Guardar en el estado de la sesión
+        st.session_state.df_movimientos = df_c
+        st.success("Archivo cargado con éxito.")
+
+    # Inicializar si no existe (datos de ejemplo)
     if 'df_movimientos' not in st.session_state:
         st.session_state.df_movimientos = pd.DataFrame([
-            {'fecha': '2023-01-01', 'tipo': 'DEPOSITO', 'instrumento': 'CASH', 'monto': 10000.0, 'cantidad': 0},
-            {'fecha': '2023-01-05', 'tipo': 'COMPRA', 'instrumento': 'AAPL', 'monto': 5000.0, 'cantidad': 35}
+            {'fecha': pd.to_datetime('2023-01-01'), 'tipo': 'DEPOSITO', 'instrumento': 'CASH', 'monto': 10000.0, 'cantidad': 0}
         ])
-    st.session_state.df_movimientos = st.data_editor(st.session_state.df_movimientos, num_rows="dynamic", use_container_width=True)
+    
+    # El editor manual (permite corregir lo subido o agregar filas)
+    st.session_state.df_movimientos = st.data_editor(
+        st.session_state.df_movimientos, 
+        num_rows="dynamic", 
+        use_container_width=True
+    )
 
 # PROCESAMIENTO
 curva, spy_c, df_p = simular_cartera_final(st.session_state.df_movimientos)
@@ -192,4 +219,5 @@ if curva is not None and not curva.empty:
                 st.plotly_chart(px.imshow(df_p.pct_change().corr(), text_auto=".2f", color_continuous_scale='RdBu_r'), use_container_width=True)
 else:
     st.info("Carga datos válidos para ver el análisis.")
+
 
