@@ -15,10 +15,13 @@ st.title("📊 My Portfolio Management")
 st.markdown("### Reporte de rendimiento & risk assessment")
 st.caption(f"Última actualización: {datetime.now().strftime('%d/%m/%Y %H:%M')}")
 st.divider()
-
-# --- FUNCIONES FINANCIERAS ---
+# --- FUNCIONES FINANCIERAS ROBUSTAS ---
 def xirr_core(cashflows, dates):
-    if len(cashflows) < 2 or sum(cashflows) == 0: return 0.0
+    """Calcula la TIR (XIRR). Retorna 0 si los flujos no son válidos."""
+    if len(cashflows) < 2: return 0.0
+    # Validar que haya al menos un flujo positivo y uno negativo
+    if all(x >= 0 for x in cashflows) or all(x <= 0 for x in cashflows):
+        return 0.0
     try:
         start_date = min(dates)
         def npv(rate):
@@ -28,19 +31,24 @@ def xirr_core(cashflows, dates):
         return 0.0
 
 def obtener_metricas_riesgo(serie_cartera, serie_spy, rf=0.04):
-    if serie_cartera.empty or len(serie_cartera) < 5 or serie_cartera.iloc[-1] == 0: 
+    if serie_cartera.empty or len(serie_cartera) < 5 or serie_cartera.iloc[-1] == 0:
         return 0, 0, 0, 0, 0
+    
     rets = serie_cartera.pct_change().replace([np.inf, -np.inf], np.nan).dropna()
+    if rets.empty: return 0, 0, 0, 0, 0
+    
     vol = rets.std() * np.sqrt(252)
     sharpe = (rets.mean() * 252 - rf) / vol if vol > 0 else 0
     sortino = (rets.mean() * 252 - rf) / (rets[rets<0].std() * np.sqrt(252)) if len(rets[rets<0])>0 else 0
+    
     beta = 1.0
-    if not serie_spy.empty and serie_spy.iloc[-1] != 0:
+    if not serie_spy.empty and not serie_spy.isna().all():
         spy_rets = serie_spy.pct_change().replace([np.inf, -np.inf], np.nan).dropna()
         common = pd.concat([rets, spy_rets], axis=1).dropna()
         if len(common) > 5:
-            beta = np.cov(common.iloc[:,0], common.iloc[:,1])[0][1] / np.var(common.iloc[:,1])
-    var_95 = np.percentile(rets, 5) if not rets.empty else 0
+            beta = np.cov(common.iloc[:,0], common.iloc[:,1])[0][1] / (np.var(common.iloc[:,1]) + 1e-9)
+            
+    var_95 = np.percentile(rets, 5)
     return vol, sharpe, sortino, beta, var_95
 
 @st.cache_data(ttl=3600, show_spinner=False)
@@ -54,13 +62,14 @@ def simular_cartera_final(df_movs):
     activos = [i for i in df['instrumento'].unique() if i != 'CASH']
     tickers = list(set(activos + ['SPY']))
     
-    # DESCARGA CON YFINANCE (Más robusto en la nube)
-    with st.spinner('Obteniendo datos de Yahoo Finance...'):
-        data = yf.download(tickers, start=start_date - timedelta(days=10), end=end_date, progress=False)
+    # Descarga de datos
+    with st.spinner('Obteniendo datos de mercado...'):
+        data = yf.download(tickers, start=start_date - timedelta(days=15), end=end_date, progress=False)
+        if 'Close' not in data or data['Close'].empty:
+            st.error("Error: No se pudieron descargar precios. Revisa los Tickers.")
+            return None, None, None
         precios = data['Close'].ffill().bfill()
 
-    if precios.empty: return None, None, None
-    
     fechas_rango = pd.date_range(start_date, end_date)
     precios = precios.reindex(fechas_rango).ffill().bfill()
     
@@ -95,18 +104,12 @@ def simular_cartera_final(df_movs):
 
     return pd.Series(hist_cartera, index=fechas_rango), pd.Series(hist_spy, index=fechas_rango), precios
 
-# --- TABS ---
-tab1, tab2, tab3 = st.tabs(["🏠 Principal", "📥 Movimientos", "📉 Riesgo"])
+# --- INTERFAZ DE TABS ---
+tab1, tab2, tab3 = st.tabs(["🏠 Principal", "📥 Movimientos", "📉 Métricas & Riesgo"])
 
 with tab2:
-    st.subheader("Carga de Movimientos")
-    archivo = st.file_uploader("Subir Excel/CSV", type=['xlsx', 'csv'])
-    if archivo:
-        df_c = pd.read_csv(archivo) if archivo.name.endswith('.csv') else pd.read_excel(archivo)
-        df_c.columns = df_c.columns.str.lower().str.strip()
-        df_c['fecha'] = pd.to_datetime(df_c['fecha'])
-        st.session_state.df_movimientos = df_c
-    elif 'df_movimientos' not in st.session_state:
+    st.subheader("Editor de Movimientos")
+    if 'df_movimientos' not in st.session_state:
         st.session_state.df_movimientos = pd.DataFrame([
             {'fecha': '2023-01-01', 'tipo': 'DEPOSITO', 'instrumento': 'CASH', 'monto': 10000.0, 'cantidad': 0},
             {'fecha': '2023-01-05', 'tipo': 'COMPRA', 'instrumento': 'AAPL', 'monto': 5000.0, 'cantidad': 35}
@@ -120,42 +123,73 @@ if curva is not None and not curva.empty:
     with tab1:
         v_act = curva.iloc[-1]
         df_m = st.session_state.df_movimientos
-        neto = df_m[df_m['tipo'].str.upper()=='DEPOSITO']['monto'].sum() - df_m[df_m['tipo'].str.upper()=='RETIRO']['monto'].sum()
+        dep = df_m[df_m['tipo'].str.upper()=='DEPOSITO']['monto'].sum()
+        ret = df_m[df_m['tipo'].str.upper()=='RETIRO']['monto'].sum()
+        neto = dep - ret
         
         c1, c2, c3 = st.columns(3)
-        c1.metric("Patrimonio Actual", f"$ {v_act:,.2f}", f"{(v_act/neto-1):.2%}" if neto > 0 else "0%")
-        tir_val = xirr_core(df_m[df_m['tipo'].isin(['DEPOSITO','RETIRO'])]['monto'].tolist() + [-v_act], 
-                           [pd.to_datetime(d) for d in df_m[df_m['tipo'].isin(['DEPOSITO','RETIRO'])]['fecha'].tolist()] + [pd.Timestamp.now()])
-        c2.metric("TIR Cartera", f"{tir_val:.2%}")
-        c3.metric("Benchmark SPY", f"$ {spy_c.iloc[-1]:,.2f}")
+        c1.metric("Valor Actual", f"$ {v_act:,.2f}", f"{(v_act/neto-1):.2%}" if neto > 0 else "0%")
+        
+        # TIR Cartera Global
+        cfs_g = df_m[df_m['tipo'].isin(['DEPOSITO','RETIRO'])].apply(lambda x: -abs(x['monto']) if x['tipo'].upper()=='DEPOSITO' else abs(x['monto']), axis=1).tolist() + [v_act]
+        fechas_g = pd.to_datetime(df_m[df_m['tipo'].isin(['DEPOSITO','RETIRO'])]['fecha']).tolist() + [pd.Timestamp.now()]
+        c2.metric("TIR Cartera", f"{xirr_core(cfs_g, fechas_g):.2%}")
+        
+        bench_val = spy_c.iloc[-1] if not spy_c.empty else 0
+        c3.metric("Benchmark (SPY)", f"$ {bench_val:,.2f}")
 
         fig = go.Figure()
-        fig.add_trace(go.Scatter(x=curva.index, y=curva, name="Mi Cartera", line=dict(color="#00CC96")))
+        fig.add_trace(go.Scatter(x=curva.index, y=curva, name="Mi Cartera", line=dict(color="#00CC96", width=2)))
         fig.add_trace(go.Scatter(x=spy_c.index, y=spy_c, name="SPY Bench", line=dict(color="#EF553B", dash="dot")))
         st.plotly_chart(fig, use_container_width=True)
 
     with tab3:
+        # 1. Métricas
         vol, sha, sor, bet, var = obtener_metricas_riesgo(curva, spy_c)
         m1, m2, m3, m4, m5 = st.columns(5)
         m1.metric("Volatilidad", f"{vol:.2%}"); m2.metric("Sharpe", f"{sha:.2f}"); m3.metric("Sortino", f"{sor:.2f}"); m4.metric("Beta", f"{bet:.2f}"); m5.metric("VaR 95%", f"{var:.2%}")
         
         st.divider()
+        
+        # 2. RENDIMIENTO POR ACTIVO (AQUÍ ESTÁ LA CORRECCIÓN)
         st.subheader("Rendimiento por Activo")
         resumen = []
         for act in [a for a in st.session_state.df_movimientos['instrumento'].unique() if a != 'CASH']:
-            m_act = st.session_state.df_movimientos[st.session_state.df_movimientos['instrumento'] == act]
+            m_act = st.session_state.df_movimientos[st.session_state.df_movimientos['instrumento'] == act].copy()
             p_final = df_p[act].iloc[-1] if act in df_p.columns else 0
             cant = m_act[m_act['tipo'].str.upper()=='COMPRA']['cantidad'].sum() - m_act[m_act['tipo'].str.upper()=='VENTA']['cantidad'].sum()
             val_act = cant * p_final
-            resumen.append({'Activo': act, 'Posición': cant, 'Valor': val_act})
-        st.table(pd.DataFrame(resumen))
+            
+            # Construir flujos para TIR individual
+            cfs_i = []
+            for _, row in m_act.iterrows():
+                t, m = str(row['tipo']).upper(), abs(row['monto'])
+                if t == 'COMPRA': cfs_i.append(-m)
+                elif t in ['VENTA', 'DIVIDENDO']: cfs_i.append(m)
+            cfs_i.append(val_act) # Valor final como flujo positivo
+            
+            fechas_i = pd.to_datetime(m_act['fecha']).tolist() + [pd.Timestamp.now()]
+            
+            resumen.append({
+                'Activo': act,
+                'Posición': f"{cant:,.2f}",
+                'Valor Mercado': f"$ {val_act:,.2f}",
+                'TIR (XIRR)': f"{xirr_core(cfs_i, fechas_i):.2%}"
+            })
         
-        col_a, col_b = st.columns(2)
-        with col_a:
-            st.write("**Drawdown**")
-            st.area_chart((curva - curva.cummax()) / curva.cummax())
-        with col_b:
-            st.write("**Correlación**")
+        if resumen:
+            st.table(pd.DataFrame(resumen))
+        
+        # 3. Gráficos y Correlación
+        c_left, c_right = st.columns(2)
+        with c_left:
+            st.write("**Drawdown Histórico**")
+            dd = (curva - curva.cummax()) / (curva.cummax() + 1e-9)
+            st.area_chart(dd, color="#ff4b4b")
+        with c_right:
+            st.write("**Matriz de Correlación**")
             if not df_p.empty:
-                st.plotly_chart(px.imshow(df_p.pct_change().corr(), text_auto=".2f"), use_container_width=True)
+                st.plotly_chart(px.imshow(df_p.pct_change().corr(), text_auto=".2f", color_continuous_scale='RdBu_r'), use_container_width=True)
+else:
+    st.info("Carga datos válidos para ver el análisis.")
 
