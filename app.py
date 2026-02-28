@@ -1,7 +1,7 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
-import pandas_datareader.data as web
+import yfinance as yf
 import plotly.graph_objects as go
 import plotly.express as px
 from datetime import datetime, timedelta
@@ -158,3 +158,4 @@ if curva is not None and not curva.empty:
             st.write("**Correlación**")
             if not df_p.empty:
                 st.plotly_chart(px.imshow(df_p.pct_change().corr(), text_auto=".2f"), use_container_width=True)
+
