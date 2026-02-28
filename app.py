@@ -52,23 +52,6 @@ def obtener_metricas_riesgo(serie_cartera, serie_spy, rf=0.04):
     return vol, sharpe, sortino, beta, var_95
 
 @st.cache_data(ttl=3600, show_spinner=False)
-
-def calcular_posiciones_reales(df_pos):
-    """Calcula el valor actual de mercado basado en una foto de posiciones."""
-    if df_pos.empty: return None, None
-    
-    tickers = [t for t in df_pos['ticker'].unique() if pd.notna(t) and t != '']
-    # Descargamos solo el último precio
-    data = yf.download(tickers + ['SPY'], period="1d", progress=False)
-    precios_hoy = data['Close'].iloc[-1]
-    
-    df_res = df_pos.copy()
-    df_res['precio_mkt'] = df_res['ticker'].map(precios_hoy)
-    df_res['valor_actual'] = df_res['cantidad'] * df_res['precio_mkt']
-    df_res['peso_%'] = (df_res['valor_actual'] / df_res['valor_actual'].sum()) * 100
-    
-    return df_res, precios_hoy['SPY']
-    
 def simular_cartera_final(df_movs):
     if df_movs.empty: return None, None, None
     df = df_movs.copy()
@@ -124,30 +107,9 @@ def simular_cartera_final(df_movs):
 # --- INTERFAZ DE TABS ---
 tab1, tab2, tab3 = st.tabs(["🏠 Principal", "📥 Movimientos", "📉 Métricas & Riesgo"])
 with tab2:
-    st.subheader("📥 Gestión de Datos")
-    st.subheader("📥 Movimientos y posicion final")
+    st.subheader("Carga y Edición de Movimientos")
     st.info("💡 **Nota:** Si no subes un archivo, verás datos de ejemplo. Puedes editarlos directamente en la tabla de abajo o subir tu propio Excel/CSV para limpiar el reporte, respetando el formato del ejemplo.")
     
-    # --- SECCIÓN A: HISTORIAL ---
-    st.markdown("#### 1. Historial de Movimientos")
-    st.caption("Para la curva de evolución temporal y comparativa vs SPY.")
-    archivo_h = st.file_uploader("Subir Historial (Excel/CSV)", type=['xlsx', 'csv'], key="u_hist")
-    
-    if archivo_h:
-        df_h = pd.read_csv(archivo_h) if archivo_h.name.endswith('.csv') else pd.read_excel(archivo_h)
-        df_h.columns = df_h.columns.str.lower().str.strip()
-        st.session_state.df_movimientos = df_h
-
-    st.session_state.df_movimientos = st.data_editor(
-        st.session_state.df_movimientos, 
-        num_rows="dynamic", 
-        use_container_width=True,
-        key="ed_hist",
-        column_config={"fecha": st.column_config.DateColumn("Fecha", format="DD/MM/YYYY")}
-    )
-
-    st.divider()   
-
     # El componente para subir el archivo
     archivo = st.file_uploader("Subir Excel (.xlsx) o CSV (.csv)", type=['xlsx', 'csv'])
     
@@ -188,27 +150,8 @@ with tab2:
         }
     )
 
-    # --- SECCIÓN B: FOTO ACTUAL ---
-    st.markdown("#### 2. Foto de Posiciones Actuales")
-    st.caption("Para corregir el valor actual real y métricas de riesgo exactas.")
-    archivo_f = st.file_uploader("Subir Foto Actual (Excel/CSV)", type=['xlsx', 'csv'], key="u_foto")
-    
-    if 'df_foto' not in st.session_state:
-        st.session_state.df_foto = pd.DataFrame(columns=['fecha', 'tipo', 'instrumento', 'monto', 'cantidad'])
-
-    if archivo_f:
-        df_f = pd.read_csv(archivo_f) if archivo_f.name.endswith('.csv') else pd.read_excel(archivo_f)
-        df_f.columns = df_f.columns.str.lower().str.strip()
-        st.session_state.df_foto = df_f
-
-    st.session_state.df_foto = st.data_editor(
-        st.session_state.df_foto, 
-        num_rows="dynamic", 
-        use_container_width=True,
-        key="ed_foto"
-    )
-
-    btn_actualizar = st.button("🚀 Actualizar Todo el reporte", use_container_width=True, type="primary")
+    # EL BOTÓN MÁGICO
+    btn_actualizar = st.button("🚀 Actualizar Reporte", use_container_width=True, type="primary")
 
 # PROCESAMIENTO
 # 1. Preparamos el lugar donde guardaremos los resultados para que no se borren al navegar
@@ -301,37 +244,8 @@ if curva is not None and not curva.empty:
             st.write("**Matriz de Correlación**")
             if not df_p.empty:
                 st.plotly_chart(px.imshow(df_p.pct_change().corr(), text_auto=".2f", color_continuous_scale='RdBu_r'), use_container_width=True)
-        
-        if btn_actualizar:
-            # 1. Procesar Historial (Solo para el gráfico del Tab 1)
-            df_h_val = st.session_state.df_movimientos.dropna(subset=['instrumento', 'monto'])
-            curva_h, spy_h, precios_h = simular_cartera_final(df_h_val)
-            
-            # 2. Procesar Foto Actual (Esta es la VERDAD para el Dashboard y Riesgo)
-            df_f_val = st.session_state.df_foto.dropna(subset=['instrumento', 'monto'])
-            
-            # Si la foto tiene datos, mandan esos datos. Si está vacía, cae en la simulación.
-            if not df_f_val.empty:
-                v_actual_real = df_f_val['monto'].sum()
-                # Usamos los instrumentos de la foto para el análisis de riesgo
-                tabla_resumen = df_f_val.copy()
-            else:
-                v_actual_real = curva_h.iloc[-1]
-                tabla_resumen = pd.DataFrame() # Aquí podrías generar el resumen desde la simulación
-        
-            # 3. Guardar en resultados
-            st.session_state.resultados = {
-                'curva': curva_h,
-                'spy': spy_h,
-                'precios': precios_h,
-                'v_actual': v_actual_real,
-                'tabla_activos': tabla_resumen
-            }
-
-        else:
-             st.info("Carga datos válidos para ver el análisis.")
-
-
+else:
+    st.info("Carga datos válidos para ver el análisis.")
 
 
 
