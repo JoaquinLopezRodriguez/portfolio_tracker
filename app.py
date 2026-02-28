@@ -139,16 +139,40 @@ with tab2:
                 {'fecha': pd.to_datetime('2023-02-01'), 'tipo': 'COMPRA', 'instrumento': 'MSFT', 'monto': 4000.0, 'cantidad': 15},
                 {'fecha': pd.to_datetime('2023-03-10'), 'tipo': 'DIVIDENDO', 'instrumento': 'AAPL', 'monto': 50.0, 'cantidad': 0}
             ])
-    # El editor manual (permite corregir lo subido o agregar filas)
+   # EL EDITOR CON FORMATO DE FECHA
     st.session_state.df_movimientos = st.data_editor(
         st.session_state.df_movimientos, 
         num_rows="dynamic", 
-        use_container_width=True
+        use_container_width=True,
+        column_config={
+            "fecha": st.column_config.DateColumn("Fecha", format="DD/MM/YYYY"),
+            "monto": st.column_config.NumberColumn("Monto ($)", format="$ %.2f"),
+        }
     )
 
-# PROCESAMIENTO
-curva, spy_c, df_p = simular_cartera_final(st.session_state.df_movimientos)
+    # EL BOTÓN MÁGICO
+    btn_actualizar = st.button("🚀 Actualizar Reporte", use_container_width=True, type="primary")
 
+# PROCESAMIENTO
+# 1. Preparamos el lugar donde guardaremos los resultados para que no se borren al navegar
+if 'resultados' not in st.session_state:
+    st.session_state.resultados = (None, None, None)
+
+# 2. Solo calculamos si el usuario toca el botón
+if btn_actualizar:
+    # Limpiamos datos vacíos para que yfinance no explote
+    df_temp = st.session_state.df_movimientos.dropna(subset=['instrumento', 'monto'])
+    df_temp = df_temp[df_temp['instrumento'].astype(str).str.strip() != ""]
+    
+    if not df_temp.empty:
+        # Guardamos el resultado en la sesión
+        st.session_state.resultados = simular_cartera_final(df_temp)
+        st.success("¡Reporte actualizado!")
+    else:
+        st.warning("La tabla está vacía. Agrega movimientos.")
+
+# 3. Desempaquetamos lo que sea que haya en la sesión (ya sea nuevo o guardado)
+curva, spy_c, df_p = st.session_state.resultados
 if curva is not None and not curva.empty:
     with tab1:
         v_act = curva.iloc[-1]
@@ -222,6 +246,7 @@ if curva is not None and not curva.empty:
                 st.plotly_chart(px.imshow(df_p.pct_change().corr(), text_auto=".2f", color_continuous_scale='RdBu_r'), use_container_width=True)
 else:
     st.info("Carga datos válidos para ver el análisis.")
+
 
 
 
