@@ -153,25 +153,31 @@ with tab2:
 if 'resultados' not in st.session_state:
     st.session_state.resultados = {'curva': None, 'spy': None, 'precios': None, 'v_real': 0}
 
+# --- PROCESAMIENTO HÍBRIDO ---
 if btn_actualizar:
     df_h_val = st.session_state.df_movimientos.dropna(subset=['instrumento', 'monto'])
     df_f_val = st.session_state.df_foto.dropna(subset=['instrumento', 'monto'])
     
     if not df_h_val.empty:
-        # Simulamos historial para el gráfico
+        # 1. Reconstruimos el pasado con los movimientos para el gráfico y riesgo
         curva_h, spy_h, precios_h = simular_cartera_final(df_h_val)
         
-        # VALOR REAL: Sumamos el monto de la Foto Actual. 
-        # Si la foto está vacía, usamos el último punto de la simulación.
-        v_real = df_f_val['monto'].sum() if not df_f_val.empty else curva_h.iloc[-1]
+        # 2. Ajustamos el valor de HOY con la Foto Actual para que sea exacto
+        v_real_hoy = df_f_val['monto'].sum() if not df_f_val.empty else curva_h.iloc[-1]
         
+        # 3. Guardamos todo. Usamos curva_h para Volatilidad/Sharpe
         st.session_state.resultados = {
-            'curva': curva_h, 'spy': spy_h, 'precios': precios_h, 'v_real': v_real
+            'curva': curva_h, 
+            'spy': spy_h, 
+            'precios': precios_h, 
+            'v_real': v_real_hoy,
+            'df_foto': df_f_val
         }
-        st.success("¡Reporte actualizado!")
+        st.success("¡Reporte sincronizado!")
 
+# Extraemos para las pestañas
 res = st.session_state.resultados
-curva, spy_c, df_p, v_act_real = res['curva'], res['spy'], res['precios'], res['v_real']
+curva, spy_c, df_p, v_act = res['curva'], res['spy'], res['precios'], res['v_real']
 
 # El if curva is not None... debe seguir abajo normalmente
 if curva is not None and not curva.empty:
