@@ -168,11 +168,10 @@ if btn_actualizar:
         st.success("¡Reporte actualizado!")
 
 res = st.session_state.resultados
-curva, spy_c, df_p, v_act_real = res['curva'], res['spy'], res['precios'], res['v_real']warning("La tabla está vacía. Agrega movimientos.")
+curva, spy_c, df_p, v_act_real = res['curva'], res['spy'], res['precios'], res['v_real']
 
-# 3. Desempaquetamos lo que sea que haya en la sesión (ya sea nuevo o guardado)
-
-if curva is not None:
+# El if curva is not None... debe seguir abajo normalmente
+if curva is not None and not curva.empty:
     with tab1:
         v_act = v_act_real # <--- LA FOTO ACTUAL MANDA AQUÍ
         df_m = st.session_state.df_movimientos
