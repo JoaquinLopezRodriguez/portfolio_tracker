@@ -183,4 +183,4 @@ if curva is not None and not curva.empty:
             st.write("**Matriz de Correlación**")
             if not df_p.empty: st.plotly_chart(px.imshow(df_p.pct_change().corr(), text_auto=".2f", color_continuous_scale='RdBu_r'), use_container_width=True)
 else:
-    st.info("Carga tus movimientos históricos y posiciones actuales para, y presiona 'Actualizar Reporte'. Caso contrario se mostrarán datos de prueba")
+    st.info("Carga tus movimientos históricos y posiciones actuales para, y presiona 'Actualizar Reporte' en la pestaña 'Movimientos'. Caso contrario se mostrarán datos de prueba")
