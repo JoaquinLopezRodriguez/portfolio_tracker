@@ -109,14 +109,26 @@ tab1, tab2, tab3 = st.tabs(["🏠 Principal", "📥 Movimientos", "📉 Métrica
 with tab2:
     st.subheader("📥 Gestión de Datos")
     
-    # 1. HISTORIAL
-    st.markdown("#### 1. Historial de Movimientos (Gráfico)")
+    # --- 1. PRIMERO: Inicializamos los datos si no existen ---
+    if 'df_movimientos' not in st.session_state:
+        st.session_state.df_movimientos = pd.DataFrame([
+            {'fecha': pd.to_datetime('2023-01-01'), 'tipo': 'DEPOSITO', 'instrumento': 'CASH', 'monto': 10000.0, 'cantidad': 0}
+        ])
+    
+    if 'df_foto' not in st.session_state:
+        st.session_state.df_foto = pd.DataFrame([
+            {'instrumento': 'CASH', 'monto': 0.0, 'cantidad': 0}
+        ])
+
+    # --- 2. SEGUNDO: Los cargadores de archivos (Uploader) ---
     archivo_h = st.file_uploader("Subir Historial", type=['xlsx', 'csv'], key="u_hist")
     if archivo_h:
         df_h = pd.read_csv(archivo_h) if archivo_h.name.endswith('.csv') else pd.read_excel(archivo_h)
         df_h.columns = df_h.columns.str.lower().str.strip()
         st.session_state.df_movimientos = df_h
 
+    # --- 3. TERCERO: Los editores (Data Editor) ---
+    # Ahora que ya existen en session_state, no darán error
     st.session_state.df_movimientos = st.data_editor(
         st.session_state.df_movimientos, num_rows="dynamic", use_container_width=True, key="ed_hist",
         column_config={"fecha": st.column_config.DateColumn("Fecha", format="DD/MM/YYYY")}
@@ -124,24 +136,15 @@ with tab2:
 
     st.divider()
 
-    # 2. FOTO ACTUAL
-    st.markdown("#### 2. Foto de Posiciones Actuales (Métricas)")
-    st.caption("Esta tabla manda sobre el valor actual y las métricas de hoy.")
     archivo_f = st.file_uploader("Subir Foto Actual", type=['xlsx', 'csv'], key="u_foto")
-    
-    if 'df_foto' not in st.session_state:
-        st.session_state.df_foto = pd.DataFrame([
-            {'fecha': pd.to_datetime('2026-02-28'), 'tipo': 'POSICION', 'instrumento': 'CASH', 'monto': 2200.0, 'cantidad': 0},
-            {'fecha': pd.to_datetime('2026-02-28'), 'tipo': 'POSICION', 'instrumento': 'MELI', 'monto': 2750.0, 'cantidad': 2},
-            {'fecha': pd.to_datetime('2026-02-28'), 'tipo': 'POSICION', 'instrumento': 'AAPL', 'monto': 6000.0, 'cantidad': 35}
-        ])
-
     if archivo_f:
         df_f = pd.read_csv(archivo_f) if archivo_f.name.endswith('.csv') else pd.read_excel(archivo_f)
         df_f.columns = df_f.columns.str.lower().str.strip()
         st.session_state.df_foto = df_f
 
-    st.session_state.df_foto = st.data_editor(st.session_state.df_foto, num_rows="dynamic", use_container_width=True, key="ed_foto")
+    st.session_state.df_foto = st.data_editor(
+        st.session_state.df_foto, num_rows="dynamic", use_container_width=True, key="ed_foto"
+    )
 
     btn_actualizar = st.button("🚀 Actualizar Reporte", use_container_width=True, type="primary")
 
