@@ -72,16 +72,16 @@ def simular_cartera_final(df_movs):
         hist_cartera.append(val_mkt + caja); hist_spy.append(pos_spy * p_spy)
     return pd.Series(hist_cartera, index=fechas_rango), pd.Series(hist_spy, index=fechas_rango), precios
 
-# --- INTERFAZ DE TABS ---
-tab1, tab2, tab3 = st.tabs(["🏠 Principal", "📥 Movimientos", "📉 Métricas & Riesgo"])
-
 # --- INICIALIZACIÓN DE ESTADO ---
 if 'df_movimientos' not in st.session_state:
-    st.session_state.df_movimientos = pd.DataFrame([{'fecha': pd.to_datetime('2023-01-01'), 'tipo': 'DEPOSITO', 'instrumento': 'CASH', 'monto': 10000.0, 'cantidad': 0}])
+    st.session_state.df_movimientos = pd.DataFrame([{'fecha': pd.to_datetime('2024-01-01'), 'tipo': 'DEPOSITO', 'instrumento': 'CASH', 'monto': 15000.0, 'cantidad': 0}])
 if 'df_foto' not in st.session_state:
-    st.session_state.df_foto = pd.DataFrame([{'instrumento': 'CASH', 'monto': 10000.0, 'cantidad': 0}])
+    st.session_state.df_foto = pd.DataFrame([{'instrumento': 'CASH', 'monto': 725.5, 'cantidad': 0}])
 if 'resultados' not in st.session_state:
     st.session_state.resultados = {'curva': None, 'spy': None, 'precios': None, 'v_real': 0.0}
+
+# --- TABS ---
+tab1, tab2, tab3 = st.tabs(["🏠 Principal", "📥 Movimientos", "📉 Métricas & Riesgo"])
 
 with tab2:
     st.subheader("📥 Gestión de Datos")
@@ -102,7 +102,7 @@ with tab2:
     st.session_state.df_foto = st.data_editor(st.session_state.df_foto, num_rows="dynamic", use_container_width=True, key="ed_foto")
     btn_actualizar = st.button("🚀 Actualizar Reporte", use_container_width=True, type="primary")
 
-# --- PROCESAMIENTO GLOBAL (FUERA DE LOS TABS) ---
+# --- PROCESAMIENTO GLOBAL ---
 if btn_actualizar:
     df_h_val = st.session_state.df_movimientos.dropna(subset=['instrumento', 'monto'])
     df_f_val = st.session_state.df_foto.dropna(subset=['instrumento', 'monto'])
@@ -116,15 +116,16 @@ if btn_actualizar:
 res = st.session_state.resultados
 curva, spy_c, df_p, v_act_real = res['curva'], res['spy'], res['precios'], res['v_real']
 
-# --- VISUALIZACIONES ---
+# --- VISTAS ---
 if curva is not None and not curva.empty:
     with tab1:
-        neto = st.session_state.df_movimientos[st.session_state.df_movimientos['tipo'].str.upper()=='DEPOSITO']['monto'].sum() - st.session_state.df_movimientos[st.session_state.df_movimientos['tipo'].str.upper()=='RETIRO']['monto'].sum()
+        df_m = st.session_state.df_movimientos
+        neto = df_m[df_m['tipo'].str.upper()=='DEPOSITO']['monto'].sum() - df_m[df_m['tipo'].str.upper()=='RETIRO']['monto'].sum()
         c1, c2, c3 = st.columns(3)
-        c1.metric("Valor Actual", f"$ {v_act_real:,.2f}", f"{(v_act_real/neto-1):.2%}" if neto > 0 else "0%")
-        cfs_g = st.session_state.df_movimientos[st.session_state.df_movimientos['tipo'].isin(['DEPOSITO','RETIRO'])].apply(lambda x: -abs(x['monto']) if x['tipo'].upper()=='DEPOSITO' else abs(x['monto']), axis=1).tolist() + [v_act_real]
-        fechas_g = pd.to_datetime(st.session_state.df_movimientos[st.session_state.df_movimientos['tipo'].isin(['DEPOSITO','RETIRO'])]['fecha']).tolist() + [pd.Timestamp.now()]
-        c2.metric("TIR Cartera", f"{xirr_core(cfs_g, fechas_g):.2%}")
+        c1.metric("Valor Actual Real", f"$ {v_act_real:,.2f}", f"{(v_act_real/neto-1):.2%}" if neto > 0 else "0%")
+        cfs_g = df_m[df_m['tipo'].isin(['DEPOSITO','RETIRO'])].apply(lambda x: -abs(x['monto']) if x['tipo'].upper()=='DEPOSITO' else abs(x['monto']), axis=1).tolist() + [v_act_real]
+        fechas_g = pd.to_datetime(df_m[df_m['tipo'].isin(['DEPOSITO','RETIRO'])]['fecha']).tolist() + [pd.Timestamp.now()]
+        c2.metric("TIR Global (XIRR)", f"{xirr_core(cfs_g, fechas_g):.2%}")
         c3.metric("Benchmark (SPY)", f"$ {spy_c.iloc[-1]:,.2f}")
         fig = go.Figure([go.Scatter(x=curva.index, y=curva, name="Mi Cartera", line=dict(color="#00CC96", width=2)), go.Scatter(x=spy_c.index, y=spy_c, name="SPY Bench", line=dict(color="#EF553B", dash="dot"))])
         st.plotly_chart(fig, use_container_width=True)
@@ -141,8 +142,24 @@ if curva is not None and not curva.empty:
             act = row['instrumento']
             if act == 'CASH': continue
             m_act = st.session_state.df_movimientos[st.session_state.df_movimientos['instrumento'] == act]
-            tir_val = xirr_core(m_act.apply(lambda x: -abs(x['monto']) if x['tipo'].upper()=='COMPRA' else abs(x['monto']), axis=1).tolist() + [row['monto']], pd.to_datetime(m_act['fecha']).tolist() + [pd.Timestamp.now()])
-            resumen.append({'Activo': act, 'Posición': f"{row['cantidad']:,.2f}", 'Valor Mercado': f"$ {row['monto']:,.2f}", 'TIR (XIRR)': f"{tir_val:.2%}"})
+            # Cálculo de flujos: Compras (-), Ventas (+), Dividendos (+)
+            flujos_hist = m_act.apply(lambda x: -abs(x['monto']) if x['tipo'].upper()=='COMPRA' else abs(x['monto']), axis=1).tolist()
+            lista_para_calculo = flujos_hist + [row['monto']]
+            
+            # Resultado No Realizado ($)
+            resultado_no_realizado = sum(lista_para_calculo)
+            
+            # TIR Individual
+            fechas_i = pd.to_datetime(m_act['fecha']).tolist() + [pd.Timestamp.now()]
+            tir_val = xirr_core(lista_para_calculo, fechas_i)
+            
+            resumen.append({
+                'Activo': act, 
+                'Posición': f"{row['cantidad']:,.2f}", 
+                'Valor Mercado': f"$ {row['monto']:,.2f}", 
+                'Resultado No Realizado ($)': f"$ {resultado_no_realizado:,.2f}",
+                'TIR (XIRR)': f"{tir_val:.2%}"
+            })
         if resumen: st.table(pd.DataFrame(resumen))
         col_l, col_r = st.columns(2)
         with col_l:
