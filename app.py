@@ -222,33 +222,36 @@ if curva is not None and not curva.empty:
         st.divider()
         
         # 2. RENDIMIENTO POR ACTIVO (AQUÍ ESTÁ LA CORRECCIÓN)
-        st.subheader("Rendimiento por Activo")
-        resumen = []
-        for act in [a for a in st.session_state.df_movimientos['instrumento'].unique() if a != 'CASH']:
-            m_act = st.session_state.df_movimientos[st.session_state.df_movimientos['instrumento'] == act].copy()
-            p_final = df_p[act].iloc[-1] if act in df_p.columns else 0
-            cant = m_act[m_act['tipo'].str.upper()=='COMPRA']['cantidad'].sum() - m_act[m_act['tipo'].str.upper()=='VENTA']['cantidad'].sum()
-            val_act = cant * p_final
-            
-            # Construir flujos para TIR individual
-            cfs_i = []
-            for _, row in m_act.iterrows():
-                t, m = str(row['tipo']).upper(), abs(row['monto'])
-                if t == 'COMPRA': cfs_i.append(-m)
-                elif t in ['VENTA', 'DIVIDENDO']: cfs_i.append(m)
-            cfs_i.append(val_act) # Valor final como flujo positivo
-            
-            fechas_i = pd.to_datetime(m_act['fecha']).tolist() + [pd.Timestamp.now()]
-            
-            resumen.append({
-                'Activo': act,
-                'Posición': f"{cant:,.2f}",
-                'Valor Mercado': f"$ {val_act:,.2f}",
-                'TIR (XIRR)': f"{xirr_core(cfs_i, fechas_i):.2%}"
-            })
+    st.subheader("Rendimiento por Activo")
+    resumen = []
+    
+    # Usamos la Foto Actual para esta tabla (es lo más preciso)
+    df_foto_uso = st.session_state.df_foto.dropna(subset=['instrumento', 'monto'])
+    
+    for _, row in df_foto_uso.iterrows():
+        act = row['instrumento']
+        if act == 'CASH': continue
         
-        if resumen:
-            st.table(pd.DataFrame(resumen))
+        val_mercado = row['monto']
+        cant = row['cantidad']
+        
+        # Intentamos calcular la TIR solo si tenemos movimientos para ese activo
+        m_act = st.session_state.df_movimientos[st.session_state.df_movimientos['instrumento'] == act]
+        tir_val = 0.0
+        if not m_act.empty:
+            cfs_i = m_act.apply(lambda x: -abs(x['monto']) if x['tipo'].upper()=='COMPRA' else abs(x['monto']), axis=1).tolist() + [val_mercado]
+            fechas_i = pd.to_datetime(m_act['fecha']).tolist() + [pd.Timestamp.now()]
+            tir_val = xirr_core(cfs_i, fechas_i)
+
+        resumen.append({
+            'Activo': act,
+            'Posición': f"{cant:,.2f}",
+            'Valor Mercado': f"$ {val_mercado:,.2f}",
+            'TIR (XIRR)': f"{tir_val:.2%}"
+        })
+    
+    if resumen:
+        st.table(pd.DataFrame(resumen))
         
         # 3. Gráficos y Correlación
         c_left, c_right = st.columns(2)
