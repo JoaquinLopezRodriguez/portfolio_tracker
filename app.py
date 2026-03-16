@@ -148,70 +148,70 @@ with tab2:
 
     btn_actualizar = st.button("🚀 Actualizar Reporte", use_container_width=True, type="primary")
 
-# PROCESAMIENTO
-# 1. Preparamos el lugar donde guardaremos los resultados para que no se borren al navegar
-# --- PROCESAMIENTO GLOBAL ---
-# Inicializamos el contenedor de resultados si no existe
-if 'resultados' not in st.session_state:
-    st.session_state.resultados = {
-        'curva': None, 
-        'spy': None, 
-        'precios': None, 
-        'v_real': 0.0
-    }
-
-if btn_actualizar:
-    df_h_val = st.session_state.df_movimientos.dropna(subset=['instrumento', 'monto'])
-    df_f_val = st.session_state.df_foto.dropna(subset=['instrumento', 'monto'])
-    
-    if not df_h_val.empty:
-        # 1. Simulamos el pasado para el gráfico
-        curva_h, spy_h, precios_h = simular_cartera_final(df_h_val)
-        
-        # 2. El valor real viene de la Foto Actual (si existe)
-        v_real = df_f_val['monto'].sum() if not df_f_val.empty else (curva_h.iloc[-1] if curva_h is not None else 0.0)
-        
+    # PROCESAMIENTO
+    # 1. Preparamos el lugar donde guardaremos los resultados para que no se borren al navegar
+    # --- PROCESAMIENTO GLOBAL ---
+    # Inicializamos el contenedor de resultados si no existe
+    if 'resultados' not in st.session_state:
         st.session_state.resultados = {
-            'curva': curva_h, 
-            'spy': spy_h, 
-            'precios': precios_h, 
-            'v_real': v_real
+            'curva': None, 
+            'spy': None, 
+            'precios': None, 
+            'v_real': 0.0
         }
-        st.success("¡Reporte actualizado!")
-
-# EXTRAEMOS SIEMPRE DE LA SESIÓN (Evita el NameError)
-res = st.session_state.resultados
-curva = res['curva']
-spy_c = res['spy']
-df_p = res['precios']
-v_act_real = res['v_real']
-
-# El if curva is not None... debe seguir abajo normalmente
-if curva is not None and not curva.empty:
-    with tab1:
-        v_act = v_act_real # <--- LA FOTO ACTUAL MANDA AQUÍ
-        df_m = st.session_state.df_movimientos
+    
+    if btn_actualizar:
+        df_h_val = st.session_state.df_movimientos.dropna(subset=['instrumento', 'monto'])
+        df_f_val = st.session_state.df_foto.dropna(subset=['instrumento', 'monto'])
         
-        # El neto invertido SIEMPRE sale de los movimientos (depósitos - retiros)
-        dep = df_m[df_m['tipo'].str.upper()=='DEPOSITO']['monto'].sum()
-        ret = df_m[df_m['tipo'].str.upper()=='RETIRO']['monto'].sum()
-        neto = dep - ret
-        
-        c1, c2, c3 = st.columns(3)
-        # Ahora v_act (foto) vs neto (movimientos) dará el % real sin errores de yfinance
-        c1.metric("Valor Actual", f"$ {v_act:,.2f}", f"{(v_act/neto-1):.2%}" if neto > 0 else "0%")
-        
-        # La TIR también se vuelve más precisa
-        cfs_g = df_m[df_m['tipo'].isin(['DEPOSITO','RETIRO'])].apply(lambda x: -abs(x['monto']) if x['tipo'].upper()=='DEPOSITO' else abs(x['monto']), axis=1).tolist() + [v_act]
-        fechas_g = pd.to_datetime(df_m[df_m['tipo'].isin(['DEPOSITO','RETIRO'])]['fecha']).tolist() + [pd.Timestamp.now()]
-        c2.metric("TIR Cartera", f"{xirr_core(cfs_g, fechas_g):.2%}")
-        
-        c3.metric("Benchmark (SPY)", f"$ {spy_c.iloc[-1]:,.2f}")
-
-        fig = go.Figure()
-        fig.add_trace(go.Scatter(x=curva.index, y=curva, name="Mi Cartera", line=dict(color="#00CC96", width=2)))
-        fig.add_trace(go.Scatter(x=spy_c.index, y=spy_c, name="SPY Bench", line=dict(color="#EF553B", dash="dot")))
-        st.plotly_chart(fig, use_container_width=True)
+        if not df_h_val.empty:
+            # 1. Simulamos el pasado para el gráfico
+            curva_h, spy_h, precios_h = simular_cartera_final(df_h_val)
+            
+            # 2. El valor real viene de la Foto Actual (si existe)
+            v_real = df_f_val['monto'].sum() if not df_f_val.empty else (curva_h.iloc[-1] if curva_h is not None else 0.0)
+            
+            st.session_state.resultados = {
+                'curva': curva_h, 
+                'spy': spy_h, 
+                'precios': precios_h, 
+                'v_real': v_real
+            }
+            st.success("¡Reporte actualizado!")
+    
+    # EXTRAEMOS SIEMPRE DE LA SESIÓN (Evita el NameError)
+    res = st.session_state.resultados
+    curva = res['curva']
+    spy_c = res['spy']
+    df_p = res['precios']
+    v_act_real = res['v_real']
+    
+    # El if curva is not None... debe seguir abajo normalmente
+    if curva is not None and not curva.empty:
+        with tab1:
+            v_act = v_act_real # <--- LA FOTO ACTUAL MANDA AQUÍ
+            df_m = st.session_state.df_movimientos
+            
+            # El neto invertido SIEMPRE sale de los movimientos (depósitos - retiros)
+            dep = df_m[df_m['tipo'].str.upper()=='DEPOSITO']['monto'].sum()
+            ret = df_m[df_m['tipo'].str.upper()=='RETIRO']['monto'].sum()
+            neto = dep - ret
+            
+            c1, c2, c3 = st.columns(3)
+            # Ahora v_act (foto) vs neto (movimientos) dará el % real sin errores de yfinance
+            c1.metric("Valor Actual", f"$ {v_act:,.2f}", f"{(v_act/neto-1):.2%}" if neto > 0 else "0%")
+            
+            # La TIR también se vuelve más precisa
+            cfs_g = df_m[df_m['tipo'].isin(['DEPOSITO','RETIRO'])].apply(lambda x: -abs(x['monto']) if x['tipo'].upper()=='DEPOSITO' else abs(x['monto']), axis=1).tolist() + [v_act]
+            fechas_g = pd.to_datetime(df_m[df_m['tipo'].isin(['DEPOSITO','RETIRO'])]['fecha']).tolist() + [pd.Timestamp.now()]
+            c2.metric("TIR Cartera", f"{xirr_core(cfs_g, fechas_g):.2%}")
+            
+            c3.metric("Benchmark (SPY)", f"$ {spy_c.iloc[-1]:,.2f}")
+    
+            fig = go.Figure()
+            fig.add_trace(go.Scatter(x=curva.index, y=curva, name="Mi Cartera", line=dict(color="#00CC96", width=2)))
+            fig.add_trace(go.Scatter(x=spy_c.index, y=spy_c, name="SPY Bench", line=dict(color="#EF553B", dash="dot")))
+            st.plotly_chart(fig, use_container_width=True)
 
     with tab3:
         # 1. Métricas
@@ -222,47 +222,47 @@ if curva is not None and not curva.empty:
         st.divider()
         
         # 2. RENDIMIENTO POR ACTIVO (AQUÍ ESTÁ LA CORRECCIÓN)
-    st.subheader("Rendimiento por Activo")
-    resumen = []
-    
-    # Usamos la Foto Actual para esta tabla (es lo más preciso)
-    df_foto_uso = st.session_state.df_foto.dropna(subset=['instrumento', 'monto'])
-    
-    for _, row in df_foto_uso.iterrows():
-        act = row['instrumento']
-        if act == 'CASH': continue
+        st.subheader("Rendimiento por Activo")
+        resumen = []
         
-        val_mercado = row['monto']
-        cant = row['cantidad']
+        # Usamos la Foto Actual para esta tabla (es lo más preciso)
+        df_foto_uso = st.session_state.df_foto.dropna(subset=['instrumento', 'monto'])
         
-        # Intentamos calcular la TIR solo si tenemos movimientos para ese activo
-        m_act = st.session_state.df_movimientos[st.session_state.df_movimientos['instrumento'] == act]
-        tir_val = 0.0
-        if not m_act.empty:
-            cfs_i = m_act.apply(lambda x: -abs(x['monto']) if x['tipo'].upper()=='COMPRA' else abs(x['monto']), axis=1).tolist() + [val_mercado]
-            fechas_i = pd.to_datetime(m_act['fecha']).tolist() + [pd.Timestamp.now()]
-            tir_val = xirr_core(cfs_i, fechas_i)
-
-        resumen.append({
-            'Activo': act,
-            'Posición': f"{cant:,.2f}",
-            'Valor Mercado': f"$ {val_mercado:,.2f}",
-            'TIR (XIRR)': f"{tir_val:.2%}"
-        })
+        for _, row in df_foto_uso.iterrows():
+            act = row['instrumento']
+            if act == 'CASH': continue
+            
+            val_mercado = row['monto']
+            cant = row['cantidad']
+            
+            # Intentamos calcular la TIR solo si tenemos movimientos para ese activo
+            m_act = st.session_state.df_movimientos[st.session_state.df_movimientos['instrumento'] == act]
+            tir_val = 0.0
+            if not m_act.empty:
+                cfs_i = m_act.apply(lambda x: -abs(x['monto']) if x['tipo'].upper()=='COMPRA' else abs(x['monto']), axis=1).tolist() + [val_mercado]
+                fechas_i = pd.to_datetime(m_act['fecha']).tolist() + [pd.Timestamp.now()]
+                tir_val = xirr_core(cfs_i, fechas_i)
     
-    if resumen:
-        st.table(pd.DataFrame(resumen))
+            resumen.append({
+                'Activo': act,
+                'Posición': f"{cant:,.2f}",
+                'Valor Mercado': f"$ {val_mercado:,.2f}",
+                'TIR (XIRR)': f"{tir_val:.2%}"
+            })
         
-        # 3. Gráficos y Correlación
-        c_left, c_right = st.columns(2)
-        with c_left:
-            st.write("**Drawdown Histórico**")
-            dd = (curva - curva.cummax()) / (curva.cummax() + 1e-9)
-            st.area_chart(dd, color="#ff4b4b")
-        with c_right:
-            st.write("**Matriz de Correlación**")
-            if not df_p.empty:
-                st.plotly_chart(px.imshow(df_p.pct_change().corr(), text_auto=".2f", color_continuous_scale='RdBu_r'), use_container_width=True)
+        if resumen:
+            st.table(pd.DataFrame(resumen))
+            
+            # 3. Gráficos y Correlación
+            c_left, c_right = st.columns(2)
+            with c_left:
+                st.write("**Drawdown Histórico**")
+                dd = (curva - curva.cummax()) / (curva.cummax() + 1e-9)
+                st.area_chart(dd, color="#ff4b4b")
+            with c_right:
+                st.write("**Matriz de Correlación**")
+                if not df_p.empty:
+                    st.plotly_chart(px.imshow(df_p.pct_change().corr(), text_auto=".2f", color_continuous_scale='RdBu_r'), use_container_width=True)
 else:
     st.info("Carga datos válidos para ver el análisis.")
 
