@@ -72,14 +72,28 @@ def simular_cartera_final(df_movs):
         hist_cartera.append(val_mkt + caja); hist_spy.append(pos_spy * p_spy)
     return pd.Series(hist_cartera, index=fechas_rango), pd.Series(hist_spy, index=fechas_rango), precios
 
-# --- INICIALIZACIÓN DE ESTADO ---
+# --- INICIALIZACIÓN DE ESTADO (DATOS DE EJEMPLO) ---
 if 'df_movimientos' not in st.session_state:
-    st.session_state.df_movimientos = pd.DataFrame([{'fecha': pd.to_datetime('2024-01-01'), 'tipo': 'DEPOSITO', 'instrumento': 'CASH', 'monto': 15000.0, 'cantidad': 0}])
-if 'df_foto' not in st.session_state:
-    st.session_state.df_foto = pd.DataFrame([{'instrumento': 'CASH', 'monto': 725.5, 'cantidad': 0}])
-if 'resultados' not in st.session_state:
-    st.session_state.resultados = {'curva': None, 'spy': None, 'precios': None, 'v_real': 0.0}
+    st.session_state.df_movimientos = pd.DataFrame([
+        {'fecha': pd.to_datetime('2024-01-10'), 'tipo': 'DEPOSITO', 'instrumento': 'CASH', 'monto': 15000.00, 'cantidad': 0},
+        {'fecha': pd.to_datetime('2024-01-15'), 'tipo': 'COMPRA', 'instrumento': 'AAPL', 'monto': 4500.00, 'cantidad': 25},
+        {'fecha': pd.to_datetime('2024-02-05'), 'tipo': 'COMPRA', 'instrumento': 'MSFT', 'monto': 5000.00, 'cantidad': 12},
+        {'fecha': pd.to_datetime('2024-03-20'), 'tipo': 'COMPRA', 'instrumento': 'MELI', 'monto': 3000.00, 'cantidad': 2},
+        {'fecha': pd.to_datetime('2024-05-10'), 'tipo': 'DIVIDENDO', 'instrumento': 'AAPL', 'monto': 25.50, 'cantidad': 0},
+        {'fecha': pd.to_datetime('2024-06-01'), 'tipo': 'COMPRA', 'instrumento': 'AAPL', 'monto': 1800.00, 'cantidad': 10}
+    ])
 
+if 'df_foto' not in st.session_state:
+    st.session_state.df_foto = pd.DataFrame([
+        {'instrumento': 'CASH', 'monto': 725.50, 'cantidad': 0},
+        {'instrumento': 'AAPL', 'monto': 8225.00, 'cantidad': 35},
+        {'instrumento': 'MSFT', 'monto': 4950.00, 'cantidad': 12},
+        {'instrumento': 'MELI', 'monto': 4100.00, 'cantidad': 2}
+    ])
+
+if 'resultados' not in st.session_state:
+    # Para que la app no arranque vacía, podemos procesar los defaults al inicio
+    st.session_state.resultados = {'curva': None, 'spy': None, 'precios': None, 'v_real': 0.0}
 # --- TABS ---
 tab1, tab2, tab3 = st.tabs(["🏠 Principal", "📥 Movimientos", "📉 Métricas & Riesgo"])
 
