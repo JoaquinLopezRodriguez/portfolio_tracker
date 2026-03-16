@@ -150,34 +150,41 @@ with tab2:
 
 # PROCESAMIENTO
 # 1. Preparamos el lugar donde guardaremos los resultados para que no se borren al navegar
+# --- PROCESAMIENTO GLOBAL ---
+# Inicializamos el contenedor de resultados si no existe
 if 'resultados' not in st.session_state:
-    st.session_state.resultados = {'curva': None, 'spy': None, 'precios': None, 'v_real': 0}
+    st.session_state.resultados = {
+        'curva': None, 
+        'spy': None, 
+        'precios': None, 
+        'v_real': 0.0
+    }
 
-# --- PROCESAMIENTO HÍBRIDO ---
 if btn_actualizar:
     df_h_val = st.session_state.df_movimientos.dropna(subset=['instrumento', 'monto'])
     df_f_val = st.session_state.df_foto.dropna(subset=['instrumento', 'monto'])
     
     if not df_h_val.empty:
-        # 1. Reconstruimos el pasado con los movimientos para el gráfico y riesgo
+        # 1. Simulamos el pasado para el gráfico
         curva_h, spy_h, precios_h = simular_cartera_final(df_h_val)
         
-        # 2. Ajustamos el valor de HOY con la Foto Actual para que sea exacto
-        v_real_hoy = df_f_val['monto'].sum() if not df_f_val.empty else curva_h.iloc[-1]
+        # 2. El valor real viene de la Foto Actual (si existe)
+        v_real = df_f_val['monto'].sum() if not df_f_val.empty else (curva_h.iloc[-1] if curva_h is not None else 0.0)
         
-        # 3. Guardamos todo. Usamos curva_h para Volatilidad/Sharpe
         st.session_state.resultados = {
             'curva': curva_h, 
             'spy': spy_h, 
             'precios': precios_h, 
-            'v_real': v_real_hoy,
-            'df_foto': df_f_val
+            'v_real': v_real
         }
-        st.success("¡Reporte sincronizado!")
+        st.success("¡Reporte actualizado!")
 
-# Extraemos para las pestañas
+# EXTRAEMOS SIEMPRE DE LA SESIÓN (Evita el NameError)
 res = st.session_state.resultados
-curva, spy_c, df_p, v_act = res['curva'], res['spy'], res['precios'], res['v_real']
+curva = res['curva']
+spy_c = res['spy']
+df_p = res['precios']
+v_act_real = res['v_real']
 
 # El if curva is not None... debe seguir abajo normalmente
 if curva is not None and not curva.empty:
