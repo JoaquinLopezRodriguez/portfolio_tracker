@@ -107,90 +107,91 @@ def simular_cartera_final(df_movs):
 # --- INTERFAZ DE TABS ---
 tab1, tab2, tab3 = st.tabs(["🏠 Principal", "📥 Movimientos", "📉 Métricas & Riesgo"])
 with tab2:
-    st.subheader("Carga y Edición de Movimientos")
-    st.info("💡 **Nota:** Si no subes un archivo, verás datos de ejemplo. Puedes editarlos directamente en la tabla de abajo o subir tu propio Excel/CSV para limpiar el reporte, respetando el formato del ejemplo.")
+    st.subheader("📥 Gestión de Datos")
     
-    # El componente para subir el archivo
-    archivo = st.file_uploader("Subir Excel (.xlsx) o CSV (.csv)", type=['xlsx', 'csv'])
-    
-    if archivo:
-        # Lectura según el tipo de archivo
-        if archivo.name.endswith('.csv'):
-            df_c = pd.read_csv(archivo)
-        else:
-            df_c = pd.read_excel(archivo)
-            
-        # Limpieza básica de columnas para evitar errores de mayúsculas/espacios
-        df_c.columns = df_c.columns.str.lower().str.strip()
-        
-        # Asegurar que la fecha sea objeto datetime
-        if 'fecha' in df_c.columns:
-            df_c['fecha'] = pd.to_datetime(df_c['fecha'])
-        
-        # Guardar en el estado de la sesión
-        st.session_state.df_movimientos = df_c
-        st.success("Archivo cargado con éxito.")
+    # 1. HISTORIAL
+    st.markdown("#### 1. Historial de Movimientos (Gráfico)")
+    archivo_h = st.file_uploader("Subir Historial", type=['xlsx', 'csv'], key="u_hist")
+    if archivo_h:
+        df_h = pd.read_csv(archivo_h) if archivo_h.name.endswith('.csv') else pd.read_excel(archivo_h)
+        df_h.columns = df_h.columns.str.lower().str.strip()
+        st.session_state.df_movimientos = df_h
 
-    # Inicializar si no existe (datos de ejemplo)
-    if 'df_movimientos' not in st.session_state:
-            st.session_state.df_movimientos = pd.DataFrame([
-                {'fecha': pd.to_datetime('2023-01-01'), 'tipo': 'DEPOSITO', 'instrumento': 'CASH', 'monto': 10000.0, 'cantidad': 0},
-                {'fecha': pd.to_datetime('2023-01-15'), 'tipo': 'COMPRA', 'instrumento': 'AAPL', 'monto': 3000.0, 'cantidad': 20},
-                {'fecha': pd.to_datetime('2023-02-01'), 'tipo': 'COMPRA', 'instrumento': 'MSFT', 'monto': 4000.0, 'cantidad': 15},
-                {'fecha': pd.to_datetime('2023-03-10'), 'tipo': 'DIVIDENDO', 'instrumento': 'AAPL', 'monto': 50.0, 'cantidad': 0}
-            ])
-   # EL EDITOR CON FORMATO DE FECHA
     st.session_state.df_movimientos = st.data_editor(
-        st.session_state.df_movimientos, 
-        num_rows="dynamic", 
-        use_container_width=True,
-        column_config={
-            "fecha": st.column_config.DateColumn("Fecha", format="DD/MM/YYYY"),
-            "monto": st.column_config.NumberColumn("Monto ($)", format="$ %.2f"),
-        }
+        st.session_state.df_movimientos, num_rows="dynamic", use_container_width=True, key="ed_hist",
+        column_config={"fecha": st.column_config.DateColumn("Fecha", format="DD/MM/YYYY")}
     )
 
-    # EL BOTÓN MÁGICO
+    st.divider()
+
+    # 2. FOTO ACTUAL
+    st.markdown("#### 2. Foto de Posiciones Actuales (Métricas)")
+    st.caption("Esta tabla manda sobre el valor actual y las métricas de hoy.")
+    archivo_f = st.file_uploader("Subir Foto Actual", type=['xlsx', 'csv'], key="u_foto")
+    
+    if 'df_foto' not in st.session_state:
+        st.session_state.df_foto = pd.DataFrame([
+            {'fecha': pd.to_datetime('2026-02-28'), 'tipo': 'POSICION', 'instrumento': 'CASH', 'monto': 2200.0, 'cantidad': 0},
+            {'fecha': pd.to_datetime('2026-02-28'), 'tipo': 'POSICION', 'instrumento': 'MELI', 'monto': 2750.0, 'cantidad': 2},
+            {'fecha': pd.to_datetime('2026-02-28'), 'tipo': 'POSICION', 'instrumento': 'AAPL', 'monto': 6000.0, 'cantidad': 35}
+        ])
+
+    if archivo_f:
+        df_f = pd.read_csv(archivo_f) if archivo_f.name.endswith('.csv') else pd.read_excel(archivo_f)
+        df_f.columns = df_f.columns.str.lower().str.strip()
+        st.session_state.df_foto = df_f
+
+    st.session_state.df_foto = st.data_editor(st.session_state.df_foto, num_rows="dynamic", use_container_width=True, key="ed_foto")
+
     btn_actualizar = st.button("🚀 Actualizar Reporte", use_container_width=True, type="primary")
 
 # PROCESAMIENTO
 # 1. Preparamos el lugar donde guardaremos los resultados para que no se borren al navegar
 if 'resultados' not in st.session_state:
-    st.session_state.resultados = (None, None, None)
+    st.session_state.resultados = {'curva': None, 'spy': None, 'precios': None, 'v_real': 0}
 
-# 2. Solo calculamos si el usuario toca el botón
 if btn_actualizar:
-    # Limpiamos datos vacíos para que yfinance no explote
-    df_temp = st.session_state.df_movimientos.dropna(subset=['instrumento', 'monto'])
-    df_temp = df_temp[df_temp['instrumento'].astype(str).str.strip() != ""]
+    df_h_val = st.session_state.df_movimientos.dropna(subset=['instrumento', 'monto'])
+    df_f_val = st.session_state.df_foto.dropna(subset=['instrumento', 'monto'])
     
-    if not df_temp.empty:
-        # Guardamos el resultado en la sesión
-        st.session_state.resultados = simular_cartera_final(df_temp)
+    if not df_h_val.empty:
+        # Simulamos historial para el gráfico
+        curva_h, spy_h, precios_h = simular_cartera_final(df_h_val)
+        
+        # VALOR REAL: Sumamos el monto de la Foto Actual. 
+        # Si la foto está vacía, usamos el último punto de la simulación.
+        v_real = df_f_val['monto'].sum() if not df_f_val.empty else curva_h.iloc[-1]
+        
+        st.session_state.resultados = {
+            'curva': curva_h, 'spy': spy_h, 'precios': precios_h, 'v_real': v_real
+        }
         st.success("¡Reporte actualizado!")
-    else:
-        st.warning("La tabla está vacía. Agrega movimientos.")
+
+res = st.session_state.resultados
+curva, spy_c, df_p, v_act_real = res['curva'], res['spy'], res['precios'], res['v_real']warning("La tabla está vacía. Agrega movimientos.")
 
 # 3. Desempaquetamos lo que sea que haya en la sesión (ya sea nuevo o guardado)
-curva, spy_c, df_p = st.session_state.resultados
-if curva is not None and not curva.empty:
+
+if curva is not None:
     with tab1:
-        v_act = curva.iloc[-1]
+        v_act = v_act_real # <--- LA FOTO ACTUAL MANDA AQUÍ
         df_m = st.session_state.df_movimientos
+        
+        # El neto invertido SIEMPRE sale de los movimientos (depósitos - retiros)
         dep = df_m[df_m['tipo'].str.upper()=='DEPOSITO']['monto'].sum()
         ret = df_m[df_m['tipo'].str.upper()=='RETIRO']['monto'].sum()
         neto = dep - ret
         
         c1, c2, c3 = st.columns(3)
+        # Ahora v_act (foto) vs neto (movimientos) dará el % real sin errores de yfinance
         c1.metric("Valor Actual", f"$ {v_act:,.2f}", f"{(v_act/neto-1):.2%}" if neto > 0 else "0%")
         
-        # TIR Cartera Global
+        # La TIR también se vuelve más precisa
         cfs_g = df_m[df_m['tipo'].isin(['DEPOSITO','RETIRO'])].apply(lambda x: -abs(x['monto']) if x['tipo'].upper()=='DEPOSITO' else abs(x['monto']), axis=1).tolist() + [v_act]
         fechas_g = pd.to_datetime(df_m[df_m['tipo'].isin(['DEPOSITO','RETIRO'])]['fecha']).tolist() + [pd.Timestamp.now()]
         c2.metric("TIR Cartera", f"{xirr_core(cfs_g, fechas_g):.2%}")
         
-        bench_val = spy_c.iloc[-1] if not spy_c.empty else 0
-        c3.metric("Benchmark (SPY)", f"$ {bench_val:,.2f}")
+        c3.metric("Benchmark (SPY)", f"$ {spy_c.iloc[-1]:,.2f}")
 
         fig = go.Figure()
         fig.add_trace(go.Scatter(x=curva.index, y=curva, name="Mi Cartera", line=dict(color="#00CC96", width=2)))
